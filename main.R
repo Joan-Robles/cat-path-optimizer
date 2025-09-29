@@ -13,14 +13,11 @@ source("./cards.R")
 # Random card 
 card <- random_sym_matrix(game_size)
 
-# Turn it
-
-card90 <- turn_90(card)
-card180 <- turn_180(card)
-card270 <- turn_270(card)
-
 
 # Random board
-board <- random_board(game_size)
+small_board <- random_board(game_size = game_size)
+
+# With all borders
+board <- random_board(game_size = game_size)
 
 
