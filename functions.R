@@ -194,33 +194,6 @@ array_insert_drop <- function(A, d, where = c("begin","final")) {
 # Comentarios en español
 ##########################################
 
-array_insert_drop <- function(A, d, where = c("begin","final")) {
-  stopifnot(is.array(A), length(dim(A)) == 3L)
-  where <- match.arg(where)
-  dA <- dim(A); k <- dA[1L]; X <- dA[2L]; Y <- dA[3L]
-  
-  # Normaliza d a 1×X×Y
-  if (is.matrix(d)) {
-    if (!all(dim(d) == c(X, Y))) stop("`d` debe ser matriz X×Y compatible.")
-    d1 <- array(d, dim = c(1L, X, Y))
-  } else if (is.array(d) && length(dim(d)) == 3L && all(dim(d) == c(1L, X, Y))) {
-    d1 <- d
-  } else {
-    stop("`d` debe ser matriz X×Y o array 1×X×Y.")
-  }
-  
-  out <- array(vector(typeof(c(A, d1)), length = length(A)), dim = dA)
-  
-  if (where == "begin") {
-    out[1L, , ] <- d1[1L, , ]
-    if (k > 1L) out[2L:k, , ] <- A[1L:(k - 1L), , ]
-  } else { # "final"
-    if (k > 1L) out[1L:(k - 1L), , ] <- A[2L:k, , ]
-    out[k, , ] <- d1[1L, , ]
-  }
-  out
-}
-
 insert_new_card <- function(board, new_new_card, pos) {
   # Chequeos rápidos
   stopifnot(is.array(board), length(dim(board)) == 4L)
@@ -314,11 +287,11 @@ handle_AB <- function(board, x = NULL, angle = NULL, pos = NULL, new_card = NULL
   
   if (is_A) {
     # --- CASE A: x (2D en 1:4) + angle (90/180/270) ---
-    result <- shift_one_card(board = board, cordenates = x, amount = angle)
+    result <- shift_one_new_card(board = board, cordenates = x, amount = angle)
     
   } else if (is_B) {
     # --- CASE B: pos (1..16) + new_card (4x4) ---
-    result <-  insert_card(board = board, new_card = new_card, pos = pos)
+    result <- insert_new_card(board = board, new_new_card = new_card, pos = pos)
       
   } else {
     stop("Invalid input: expected A(x, angle) or B(pos, new_card).")
