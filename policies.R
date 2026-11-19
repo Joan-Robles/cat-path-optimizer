@@ -19,7 +19,7 @@ policy_random <- function(p_insert = 0.5) {
     choose_action = function(state, allow_insert) {
       if (allow_insert && runif(1) < p_insert) return(list(type = "insert"))
       list(type = "rotate", cell = sample(seq_len(BOARD_N), 2, replace = TRUE),
-           angle = sample(c(90, 180, 270), 1))
+           angle = sample(ROTATION_ANGLES, 1))
     },
     choose_insertion = function(state, card) {
       list(pos = sample(seq_len(RING_N), 1), angle = sample(distinct_rotations(card), 1))
@@ -29,7 +29,8 @@ policy_random <- function(p_insert = 0.5) {
 
 ##########################################
 # Política codiciosa (miope, una acción a la vez)
-# - Evalúa todas las rotaciones distintas y elige la que más gatos (solitario)
+# - Evalúa todas las rotaciones de un cuarto de vuelta (90 o 270) que cambian
+#   la carta y elige la que más gatos (solitario)
 #   o puntos (varios jugadores) gana de inmediato.
 # - Desempata con el alcance de la red conectada a los gatos.
 # - Para decidir si inserta, estima el valor esperado de insertar como el
@@ -71,7 +72,7 @@ rotation_candidates <- function(state) {
   for (i in seq_len(BOARD_N)) for (j in seq_len(BOARD_N)) {
     card <- state$board[i, j, , ]
     seen <- paste(card, collapse = "")
-    for (a in c(90, 180, 270)) {
+    for (a in ROTATION_ANGLES) {
       key <- paste(rotate_card(card, a), collapse = "")
       if (key %in% seen) next
       seen <- c(seen, key)
@@ -115,6 +116,55 @@ policy_greedy <- function(consider_insert = TRUE) {
     choose_insertion = function(state, card) {
       b <- best_insertion(state, card)
       list(pos = b$pos, angle = b$angle)
+    }
+  )
+}
+
+##########################################
+# Política de búsqueda con el motor rápido (requiere fast.R y
+# load_fast_engine())
+# - horizon = "turno": expectimax sobre las acciones que quedan en el turno,
+#   con un nodo de azar por cada carta robada.
+#   horizon = "accion": una acción a la vez, como policy_greedy().
+# - belief = "exacta": la carta robada sale de las cartas que nadie ha visto;
+#   cuando no quedan, es la primera de las expulsadas. belief = "mazo":
+#   promedio sobre todo el mazo, como policy_greedy().
+# - El valor de una jugada es lo ganado en el turno (gatos en solitario,
+#   puntos con varios jugadores) más w_reach por el alcance de la red
+#   conectada a los gatos al final.
+# Con horizon = "accion" y belief = "mazo" los valores coinciden con los de
+# policy_greedy().
+##########################################
+
+policy_search <- function(horizon = c("turno", "accion"), belief = c("exacta", "mazo"),
+                          w_reach = 0.001) {
+  horizon <- match.arg(horizon)
+  belief <- match.arg(belief)
+  actions_left <- function(state) {
+    if (horizon == "accion" || is.null(state$action)) 1L else 3L - state$action
+  }
+
+  list(
+    choose_action = function(state, allow_insert) {
+      fs <- fe_state(state, belief)
+      ch <- fe_children(fs$codes, fs$ring, fs$pts, fs$cat_deck, fs$to_win, fs$unk, fs$known,
+                        left = actions_left(state), can_insert = allow_insert,
+                        mandatory = state$params$rotation_mandatory,
+                        use_points = fs$use_points, w_reach = w_reach)
+      k <- pick_best(ch$rot[, 3])
+      if (allow_insert && ch$ins_ev > ch$rot[k, 3] + 1e-9) return(list(type = "insert"))
+      cell <- ch$rot[k, 1] - 1
+      list(type = "rotate", cell = c(cell %/% BOARD_N + 1, cell %% BOARD_N + 1),
+           angle = 90 * ch$rot[k, 2])
+    },
+    choose_insertion = function(state, card) {
+      fs <- fe_state(state, belief)
+      m <- fe_insertions(fs$codes, fs$ring, fs$pts, fs$cat_deck, fs$to_win, fs$unk, fs$known,
+                         code = card_code(card), left = actions_left(state),
+                         mandatory = state$params$rotation_mandatory,
+                         use_points = fs$use_points, w_reach = w_reach)
+      k <- pick_best(m[, 3])
+      list(pos = m[k, 1], angle = 90 * m[k, 2])
     }
   )
 }

@@ -59,6 +59,17 @@ test_that("orientaciones distintas por tipo", {
   expect_equal(unname(n_rot), c(4L, 2L, 4L, 2L, 1L, 1L))
 })
 
+test_that("una rotación gira solo un cuarto de vuelta", {
+  s <- test_state(board_fill(ct$curva), homes = 9, cats = 5, cat_points = 1)
+  expect_error(apply_rotation(s, c(1, 1), 180))
+  expect_equal(apply_rotation(s, c(1, 1), 270)$board[1, 1, , ], rotate_card(ct$curva, 270))
+  # Candidatos por tipo: curva y te 2; recta y doble curva 1 (90 = 270);
+  # puente y cruz ninguno
+  n_cand <- vapply(ct, function(card) length(rotation_candidates(
+    test_state(board_fill(card), homes = 9, cats = 5, cat_points = 1))), integer(1))
+  expect_equal(unname(n_cand), 16L * c(2L, 1L, 2L, 1L, 0L, 0L))
+})
+
 test_that("card_type_of reconoce cualquier rotación", {
   for (nm in names(ct)) for (a in c(0, 90, 180, 270))
     expect_equal(card_type_of(rotate_card(ct[[nm]], a)), nm)

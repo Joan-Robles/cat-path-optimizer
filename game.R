@@ -225,7 +225,9 @@ new_game <- function(params, n_players = 1L, seed = NULL, max_deals = 100L) {
     ring_points[c(5, 13)] <- cat_deck[1:2]
     cat_deck <- cat_deck[-(1:2)]
 
-    state <- list(board = board, deck = deck, cat_deck = cat_deck,
+    # n_unknown: cartas de arriba del mazo que nadie ha visto. Las expulsadas
+    # van al fondo y su tipo es conocido.
+    state <- list(board = board, deck = deck, n_unknown = length(deck), cat_deck = cat_deck,
                   ring_type = ring_type, ring_points = ring_points,
                   scores = numeric(n_players), cats_won = integer(n_players),
                   n_players = as.integer(n_players), player = 1L, turn = 0L,
@@ -241,8 +243,12 @@ new_game <- function(params, n_players = 1L, seed = NULL, max_deals = 100L) {
 # Acciones
 ##########################################
 
+# Una rotación gira la carta un cuarto de vuelta: 90 (derecha) o 270
+# (izquierda). Girarla 180 grados cuesta las dos acciones del turno.
+ROTATION_ANGLES <- c(90, 270)
+
 apply_rotation <- function(state, cell, angle) {
-  stopifnot(length(cell) == 2, all(cell %in% seq_len(BOARD_N)), angle %in% c(90, 180, 270))
+  stopifnot(length(cell) == 2, all(cell %in% seq_len(BOARD_N)), angle %in% ROTATION_ANGLES)
   state$board <- shift_one_new_card(state$board, cordenates = cell, amount = angle)
   state
 }
@@ -261,6 +267,7 @@ expelled_card <- function(board, pos) {
 draw_card <- function(state) {
   card <- state$deck[[1]]
   state$deck <- state$deck[-1]
+  if (!is.null(state$n_unknown) && state$n_unknown > 0) state$n_unknown <- state$n_unknown - 1L
   list(state = state, card = card)
 }
 
@@ -325,10 +332,11 @@ game_over <- function(state) sum(state$cats_won) >= state$n_cats
 # Turnos y partida
 # Una política es una lista con dos funciones:
 #  - choose_action(state, allow_insert): devuelve
-#      list(type = "rotate", cell = c(i, j), angle = 90 | 180 | 270)  o
+#      list(type = "rotate", cell = c(i, j), angle = 90 | 270)  o
 #      list(type = "insert")
 #  - choose_insertion(state, card): devuelve list(pos = 1..16, angle = 0..270)
 #    (se llama después de robar la carta, como en el reglamento)
+# state$action indica si es la primera o la segunda acción del turno.
 ##########################################
 
 play_turn <- function(state, policy) {
@@ -336,6 +344,7 @@ play_turn <- function(state, policy) {
   used_insert <- FALSE
   for (a in 1:2) {
     allow_insert <- !(state$params$rotation_mandatory && used_insert)
+    state$action <- a  # acción del turno (1 o 2), para políticas que planean el turno
     choice <- policy$choose_action(state, allow_insert)
     if (identical(choice$type, "insert")) {
       if (!allow_insert) stop("La política insertó cuando debía rotar.")

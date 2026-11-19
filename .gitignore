@@ -5,3 +5,5 @@
 .RData
 /*_cache/
 /cache/
+.rcpp_cache/
+results/*.rds
